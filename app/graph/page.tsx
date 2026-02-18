@@ -1,9 +1,62 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { fetchDocumentGraph, fetchRelatedDocuments, fetchChunkGraph } from "@/lib/api";
-import type { GraphData, GraphNode, GraphEdge, RelatedDocument } from "@/types";
+import type { GraphData, RelatedDocument } from "@/types";
+
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
+
+interface GraphNode2D {
+  id: string;
+  label: string;
+  type: "document" | "chunk";
+  isExternal?: boolean;
+  isSelected?: boolean;
+  properties: Record<string, unknown>;
+  x?: number;
+  y?: number;
+}
+
+interface GraphLink2D {
+  source: string;
+  target: string;
+  type: string;
+  score?: number;
+}
+
+function toForceData(data: GraphData, selectedDoc?: string | null) {
+  const nodes: GraphNode2D[] = data.nodes.map((n) => ({
+    id: n.id,
+    label: n.label,
+    type: n.type,
+    isExternal: n.properties.external as boolean,
+    isSelected: n.id === selectedDoc,
+    properties: n.properties,
+  }));
+
+  const links: GraphLink2D[] = data.edges.map((e) => ({
+    source: e.source,
+    target: e.target,
+    type: e.type,
+    score: e.properties.score as number | undefined,
+  }));
+
+  return { nodes, links };
+}
+
+const COLORS = {
+  docNode: "#6366f1",
+  docNodeSelected: "#f59e0b",
+  chunkNode: "#22d3ee",
+  chunkExternal: "#f97316",
+  edgeRelated: "#6366f180",
+  edgeNext: "#22d3ee60",
+  edgeSimilar: "#f9731680",
+  text: "#e2e8f0",
+  textMuted: "#94a3b8",
+};
 
 export default function GraphPage() {
   const searchParams = useSearchParams();
@@ -15,6 +68,19 @@ export default function GraphPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "chunks">("overview");
   const [selectedDoc, setSelectedDoc] = useState<string | null>(docId);
+  const [hoveredNode, setHoveredNode] = useState<GraphNode2D | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(([entry]) => {
+      setDimensions({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -53,6 +119,16 @@ export default function GraphPage() {
     else if (activeTab === "chunks" && selectedDoc) loadChunkGraph();
   }, [activeTab, loadGraph, loadChunkGraph, selectedDoc]);
 
+  const overviewForceData = useMemo(
+    () => (graphData ? toForceData(graphData, selectedDoc) : null),
+    [graphData, selectedDoc],
+  );
+
+  const chunkForceData = useMemo(
+    () => (chunkGraph ? toForceData(chunkGraph, selectedDoc) : null),
+    [chunkGraph, selectedDoc],
+  );
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -66,230 +142,245 @@ export default function GraphPage() {
             View All
           </button>
         )}
-        {selectedDoc && (
-          <div className="flex gap-1 ml-auto">
-            <button
-              onClick={() => setActiveTab("overview")}
-              className={`px-3 py-1 rounded text-xs ${activeTab === "overview" ? "bg-primary text-primary-text" : "bg-surface text-muted"}`}
-            >
-              Relationships
-            </button>
+        <div className="flex gap-1 ml-auto">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`px-3 py-1 rounded text-xs ${activeTab === "overview" ? "bg-primary text-primary-text" : "bg-surface text-muted"}`}
+          >
+            Documents
+          </button>
+          {selectedDoc && (
             <button
               onClick={() => setActiveTab("chunks")}
               className={`px-3 py-1 rounded text-xs ${activeTab === "chunks" ? "bg-primary text-primary-text" : "bg-surface text-muted"}`}
             >
               Chunks
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-muted text-sm">Loading graph...</div>
-      ) : activeTab === "overview" ? (
-        <OverviewView
-          graphData={graphData}
-          relatedDocs={relatedDocs}
-          selectedDoc={selectedDoc}
-          onSelectDoc={setSelectedDoc}
-        />
       ) : (
-        <ChunkView chunkGraph={chunkGraph} />
-      )}
-    </div>
-  );
-}
+        <div className="flex-1 flex">
+          {/* Graph canvas */}
+          <div ref={containerRef} className="flex-1 relative bg-background">
+            {activeTab === "overview" && overviewForceData && overviewForceData.nodes.length > 0 ? (
+              <ForceGraph2D
+                width={dimensions.width}
+                height={dimensions.height}
+                graphData={overviewForceData}
+                nodeRelSize={8}
+                nodeCanvasObject={(node: GraphNode2D, ctx: CanvasRenderingContext2D, globalScale: number) => {
+                  const r = node.isSelected ? 12 : 8;
+                  ctx.beginPath();
+                  ctx.arc(node.x!, node.y!, r, 0, 2 * Math.PI);
+                  ctx.fillStyle = node.isSelected ? COLORS.docNodeSelected : COLORS.docNode;
+                  ctx.fill();
+                  ctx.strokeStyle = "#fff";
+                  ctx.lineWidth = 1.5;
+                  ctx.stroke();
 
-function OverviewView({
-  graphData,
-  relatedDocs,
-  selectedDoc,
-  onSelectDoc,
-}: {
-  graphData: GraphData | null;
-  relatedDocs: RelatedDocument[];
-  selectedDoc: string | null;
-  onSelectDoc: (id: string) => void;
-}) {
-  if (!graphData || graphData.nodes.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-muted text-sm">
-        No documents in graph yet. Upload documents to see relationships.
-      </div>
-    );
-  }
+                  const fontSize = Math.max(10 / globalScale, 3);
+                  ctx.font = `${fontSize}px Sans-Serif`;
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "top";
+                  ctx.fillStyle = COLORS.text;
+                  const label = node.label.length > 25 ? node.label.slice(0, 22) + "..." : node.label;
+                  ctx.fillText(label, node.x!, node.y! + r + 3);
+                }}
+                linkColor={() => COLORS.edgeRelated}
+                linkWidth={2}
+                linkDirectionalArrowLength={6}
+                linkDirectionalArrowRelPos={1}
+                linkLabel={(link: GraphLink2D) =>
+                  link.score != null ? `${link.type} (${link.score.toFixed(3)})` : link.type
+                }
+                onNodeClick={(node: GraphNode2D) => setSelectedDoc(node.id)}
+                onNodeHover={(node: GraphNode2D | null) => setHoveredNode(node)}
+                cooldownTicks={100}
+                d3AlphaDecay={0.02}
+                d3VelocityDecay={0.3}
+              />
+            ) : activeTab === "chunks" && chunkForceData && chunkForceData.nodes.length > 0 ? (
+              <ForceGraph2D
+                width={dimensions.width}
+                height={dimensions.height}
+                graphData={chunkForceData}
+                nodeRelSize={6}
+                nodeCanvasObject={(node: GraphNode2D, ctx: CanvasRenderingContext2D, globalScale: number) => {
+                  const r = node.isExternal ? 5 : 6;
+                  ctx.beginPath();
+                  ctx.arc(node.x!, node.y!, r, 0, 2 * Math.PI);
+                  ctx.fillStyle = node.isExternal ? COLORS.chunkExternal : COLORS.chunkNode;
+                  ctx.fill();
 
-  return (
-    <div className="flex-1 overflow-auto p-6 space-y-6">
-      {/* Document Nodes */}
-      <div>
-        <h3 className="text-sm font-medium mb-3">
-          {selectedDoc ? "Selected Document & Related" : "All Documents"}
-          <span className="text-muted ml-2">({graphData.nodes.length})</span>
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {graphData.nodes.map((node) => (
-            <button
-              key={node.id}
-              onClick={() => onSelectDoc(node.id)}
-              className={`text-left p-4 rounded-xl border transition-colors ${
-                node.id === selectedDoc
-                  ? "border-primary bg-accent"
-                  : "border-border bg-surface hover:bg-surface-hover"
-              }`}
-            >
-              <div className="font-medium text-sm truncate">{node.label}</div>
-              <div className="text-xs text-muted mt-1">
-                {node.properties.fileType as string} &middot; {node.properties.totalChunks as number} chunks
+                  const fontSize = Math.max(9 / globalScale, 2.5);
+                  ctx.font = `${fontSize}px Sans-Serif`;
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "top";
+                  ctx.fillStyle = COLORS.textMuted;
+                  ctx.fillText(node.label, node.x!, node.y! + r + 2);
+                }}
+                linkColor={(link: GraphLink2D) =>
+                  link.type === "NEXT_CHUNK" ? COLORS.edgeNext : COLORS.edgeSimilar
+                }
+                linkWidth={(link: GraphLink2D) => (link.type === "NEXT_CHUNK" ? 1.5 : 2)}
+                linkDirectionalArrowLength={4}
+                linkDirectionalArrowRelPos={1}
+                linkLineDash={(link: GraphLink2D) =>
+                  link.type === "SIMILAR_TO" ? [4, 2] : undefined
+                }
+                linkLabel={(link: GraphLink2D) =>
+                  link.score != null ? `${link.type} (${link.score.toFixed(3)})` : link.type
+                }
+                cooldownTicks={100}
+                d3AlphaDecay={0.02}
+                d3VelocityDecay={0.3}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-muted text-sm h-full">
+                {activeTab === "chunks" && !selectedDoc
+                  ? "Select a document to view its chunk graph."
+                  : "No graph data. Upload documents to see relationships."}
               </div>
-            </button>
-          ))}
-        </div>
-      </div>
+            )}
 
-      {/* Edges */}
-      {graphData.edges.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium mb-3">
-            Relationships
-            <span className="text-muted ml-2">({graphData.edges.length})</span>
-          </h3>
-          <div className="space-y-2">
-            {graphData.edges.map((edge, i) => {
-              const sourceNode = graphData.nodes.find((n) => n.id === edge.source);
-              const targetNode = graphData.nodes.find((n) => n.id === edge.target);
-              return (
-                <div key={i} className="flex items-center gap-3 p-3 bg-surface rounded-lg border border-border text-sm">
-                  <span className="font-medium truncate max-w-[200px]">{sourceNode?.label}</span>
-                  <span className="text-primary-text bg-accent px-2 py-0.5 rounded text-xs shrink-0">
-                    {edge.type}
-                  </span>
-                  <span className="font-medium truncate max-w-[200px]">{targetNode?.label}</span>
-                  {edge.properties.score != null && (
-                    <span className="text-xs text-muted ml-auto">
-                      score: {(edge.properties.score as number).toFixed(3)}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Related Documents Detail */}
-      {relatedDocs.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium mb-3">Related Documents</h3>
-          <div className="border border-border rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-surface border-b border-border">
-                  <th className="text-left px-4 py-2.5 font-medium">File</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Score</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Connections</th>
-                </tr>
-              </thead>
-              <tbody>
-                {relatedDocs.map((doc) => (
-                  <tr
-                    key={doc.documentId}
-                    onClick={() => onSelectDoc(doc.documentId)}
-                    className="border-b border-border last:border-0 hover:bg-surface-hover transition-colors cursor-pointer"
-                  >
-                    <td className="px-4 py-2.5 font-medium">{doc.fileName}</td>
-                    <td className="px-4 py-2.5 text-muted">{doc.score.toFixed(3)}</td>
-                    <td className="px-4 py-2.5 text-muted">{doc.connectionCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChunkView({ chunkGraph }: { chunkGraph: GraphData | null }) {
-  if (!chunkGraph || chunkGraph.nodes.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-muted text-sm">
-        No chunk graph data available.
-      </div>
-    );
-  }
-
-  const internalChunks = chunkGraph.nodes.filter((n) => !(n.properties.external as boolean));
-  const externalChunks = chunkGraph.nodes.filter((n) => n.properties.external as boolean);
-  const nextEdges = chunkGraph.edges.filter((e) => e.type === "NEXT_CHUNK");
-  const simEdges = chunkGraph.edges.filter((e) => e.type === "SIMILAR_TO");
-
-  return (
-    <div className="flex-1 overflow-auto p-6 space-y-6">
-      {/* Chunk sequence */}
-      <div>
-        <h3 className="text-sm font-medium mb-3">
-          Chunks <span className="text-muted">({internalChunks.length})</span>
-          {nextEdges.length > 0 && (
-            <span className="text-muted ml-2">| {nextEdges.length} sequential links</span>
-          )}
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {internalChunks.map((chunk) => (
-            <div
-              key={chunk.id}
-              className="p-3 bg-surface border border-border rounded-lg w-48"
-              title={chunk.properties.textPreview as string}
-            >
-              <div className="text-xs font-medium">{chunk.label}</div>
-              <div className="text-xs text-muted mt-1 line-clamp-3">
-                {chunk.properties.textPreview as string}
-              </div>
+            {/* Legend */}
+            <div className="absolute bottom-4 left-4 bg-surface/90 backdrop-blur border border-border rounded-lg p-3 text-xs space-y-1.5">
+              {activeTab === "overview" ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full inline-block" style={{ background: COLORS.docNode }} />
+                    Document
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full inline-block" style={{ background: COLORS.docNodeSelected }} />
+                    Selected
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-0.5 inline-block" style={{ background: COLORS.edgeRelated }} />
+                    RELATED_TO
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full inline-block" style={{ background: COLORS.chunkNode }} />
+                    Chunk
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full inline-block" style={{ background: COLORS.chunkExternal }} />
+                    External
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-0.5 inline-block" style={{ background: COLORS.edgeNext }} />
+                    NEXT_CHUNK
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-0.5 inline-block border-t border-dashed" style={{ borderColor: COLORS.edgeSimilar }} />
+                    SIMILAR_TO
+                  </div>
+                </>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Cross-doc similar */}
-      {simEdges.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium mb-3">
-            Cross-Document Similarities <span className="text-muted">({simEdges.length})</span>
-          </h3>
-          <div className="space-y-2">
-            {simEdges.map((edge, i) => {
-              const from = chunkGraph.nodes.find((n) => n.id === edge.source);
-              const to = chunkGraph.nodes.find((n) => n.id === edge.target);
-              return (
-                <div key={i} className="flex items-center gap-3 p-3 bg-surface rounded-lg border border-border text-sm">
-                  <span className="font-medium text-xs">{from?.label}</span>
-                  <span className="text-primary-text bg-accent px-2 py-0.5 rounded text-xs">SIMILAR_TO</span>
-                  <span className="font-medium text-xs truncate">{to?.label}</span>
-                  {edge.properties.score != null && (
-                    <span className="text-xs text-muted ml-auto">
-                      {(edge.properties.score as number).toFixed(3)}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
           </div>
-        </div>
-      )}
 
-      {/* External chunks */}
-      {externalChunks.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium mb-3">
-            Linked External Chunks <span className="text-muted">({externalChunks.length})</span>
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {externalChunks.map((chunk) => (
-              <div key={chunk.id} className="p-3 bg-accent border border-primary rounded-lg w-48">
-                <div className="text-xs font-medium">{chunk.label}</div>
+          {/* Side panel */}
+          <div className="w-72 border-l border-border bg-surface overflow-y-auto p-4 space-y-4">
+            {/* Hover info */}
+            {hoveredNode && (
+              <div className="p-3 bg-accent rounded-lg border border-border">
+                <div className="text-sm font-medium mb-1">{hoveredNode.label}</div>
+                {hoveredNode.type === "document" && (
+                  <div className="text-xs text-muted space-y-0.5">
+                    <div>Type: {hoveredNode.properties.fileType as string}</div>
+                    <div>Chunks: {hoveredNode.properties.totalChunks as number}</div>
+                  </div>
+                )}
+                {hoveredNode.type === "chunk" && hoveredNode.properties.textPreview && (
+                  <div className="text-xs text-muted mt-1">{String(hoveredNode.properties.textPreview)}</div>
+                )}
               </div>
-            ))}
+            )}
+
+            {/* Stats */}
+            {activeTab === "overview" && graphData && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase text-muted">Overview</h3>
+                <div className="text-sm">
+                  <span className="text-muted">Nodes:</span> {graphData.nodes.length}
+                </div>
+                <div className="text-sm">
+                  <span className="text-muted">Edges:</span> {graphData.edges.length}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "chunks" && chunkGraph && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase text-muted">Chunk Graph</h3>
+                <div className="text-sm">
+                  <span className="text-muted">Chunks:</span>{" "}
+                  {chunkGraph.nodes.filter((n) => !n.properties.external).length}
+                </div>
+                <div className="text-sm">
+                  <span className="text-muted">External:</span>{" "}
+                  {chunkGraph.nodes.filter((n) => n.properties.external).length}
+                </div>
+                <div className="text-sm">
+                  <span className="text-muted">Sequential:</span>{" "}
+                  {chunkGraph.edges.filter((e) => e.type === "NEXT_CHUNK").length}
+                </div>
+                <div className="text-sm">
+                  <span className="text-muted">Similar:</span>{" "}
+                  {chunkGraph.edges.filter((e) => e.type === "SIMILAR_TO").length}
+                </div>
+              </div>
+            )}
+
+            {/* Related documents table */}
+            {relatedDocs.length > 0 && activeTab === "overview" && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase text-muted">Related Documents</h3>
+                {relatedDocs.map((doc) => (
+                  <button
+                    key={doc.documentId}
+                    onClick={() => setSelectedDoc(doc.documentId)}
+                    className="w-full text-left p-2 rounded-lg hover:bg-surface-hover transition-colors border border-border"
+                  >
+                    <div className="text-sm font-medium truncate">{doc.fileName}</div>
+                    <div className="text-xs text-muted">
+                      Score: {doc.score.toFixed(3)} | {doc.connectionCount} connections
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Document list */}
+            {activeTab === "overview" && graphData && graphData.nodes.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase text-muted">Documents</h3>
+                {graphData.nodes.map((node) => (
+                  <button
+                    key={node.id}
+                    onClick={() => setSelectedDoc(node.id)}
+                    className={`w-full text-left p-2 rounded-lg transition-colors border ${
+                      node.id === selectedDoc
+                        ? "border-amber-500 bg-amber-500/10"
+                        : "border-border hover:bg-surface-hover"
+                    }`}
+                  >
+                    <div className="text-sm font-medium truncate">{node.label}</div>
+                    <div className="text-xs text-muted">
+                      {node.properties.fileType as string} | {node.properties.totalChunks as number} chunks
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
