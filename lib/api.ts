@@ -106,6 +106,29 @@ export function chatStream(
   return controller;
 }
 
+// --- Graph API ---
+
+export async function fetchDocumentGraph(documentId?: string) {
+  const path = documentId
+    ? `${API_BASE}/api/graph/documents/${documentId}`
+    : `${API_BASE}/api/graph/documents`;
+  const res = await fetch(path);
+  if (!res.ok) throw new Error("Failed to fetch graph data");
+  return res.json();
+}
+
+export async function fetchRelatedDocuments(documentId: string) {
+  const res = await fetch(`${API_BASE}/api/graph/documents/${documentId}/related`);
+  if (!res.ok) throw new Error("Failed to fetch related documents");
+  return res.json();
+}
+
+export async function fetchChunkGraph(documentId: string) {
+  const res = await fetch(`${API_BASE}/api/graph/documents/${documentId}/chunks`);
+  if (!res.ok) throw new Error("Failed to fetch chunk graph");
+  return res.json();
+}
+
 /** SQL Agent with SSE streaming. Emits tool steps + final answer. */
 export function agentStream(
   question: string,

@@ -40,6 +40,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </svg>
                 Documents
               </Link>
+              <Link
+                href="/graph"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="6" cy="6" r="2.5" strokeWidth={2} />
+                  <circle cx="18" cy="6" r="2.5" strokeWidth={2} />
+                  <circle cx="12" cy="18" r="2.5" strokeWidth={2} />
+                  <path strokeLinecap="round" strokeWidth={2} d="M8 7.5L10.5 16M16 7.5L13.5 16M8.5 6H15.5" />
+                </svg>
+                Graph
+              </Link>
             </nav>
           </aside>
 

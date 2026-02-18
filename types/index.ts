@@ -42,3 +42,31 @@ export interface ModelOption {
 }
 
 export type ModelsMap = Record<string, ModelOption[]>;
+
+// --- Graph Types ---
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: "document" | "chunk";
+  properties: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: string;
+  properties: Record<string, unknown>;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface RelatedDocument {
+  documentId: string;
+  fileName: string;
+  score: number;
+  connectionCount: number;
+}

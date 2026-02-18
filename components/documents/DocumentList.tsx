@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { deleteDocument } from "@/lib/api";
 import type { DocumentMeta } from "@/types";
 
@@ -59,7 +60,13 @@ export default function DocumentList({ documents, loading, onDelete }: Props) {
               <td className="px-4 py-2.5 text-muted text-xs">
                 {new Date(doc.uploadedAt).toLocaleDateString()}
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-4 py-2.5 flex gap-2">
+                <Link
+                  href={`/graph?doc=${doc.id}`}
+                  className="text-primary-text hover:text-primary-hover text-xs"
+                >
+                  Graph
+                </Link>
                 <button
                   onClick={() => handleDelete(doc.id)}
                   className="text-red-500 hover:text-red-600 text-xs"
