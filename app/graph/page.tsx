@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { fetchDocumentGraph, fetchRelatedDocuments, fetchChunkGraph, fetchSchemaGraph } from "@/lib/api";
+import { fetchDocumentGraph, fetchRelatedDocuments, fetchChunkGraph, fetchSchemaGraph, deleteSchemaTable, deleteForeignKey } from "@/lib/api";
 import type { GraphData, RelatedDocument } from "@/types";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
@@ -77,6 +77,7 @@ export default function GraphPage() {
   const [selectedDoc, setSelectedDoc] = useState<string | null>(docId);
   const [hoveredNode, setHoveredNode] = useState<GraphNode2D | null>(null);
   const [selectedSchemaNode, setSelectedSchemaNode] = useState<GraphNode2D | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
@@ -133,6 +134,35 @@ export default function GraphPage() {
       setLoading(false);
     }
   }, [selectedDoc]);
+
+  const handleDeleteTable = useCallback(async (tableName: string) => {
+    if (!confirm(`Delete table "${tableName}" and all its relationships?`)) return;
+    setDeleting(true);
+    try {
+      await deleteSchemaTable(tableName);
+      setSelectedSchemaNode(null);
+      await loadSchemaGraph();
+    } catch (err) {
+      console.error("Failed to delete table:", err);
+      alert("Failed to delete table");
+    } finally {
+      setDeleting(false);
+    }
+  }, [loadSchemaGraph]);
+
+  const handleDeleteFK = useCallback(async (fromTable: string, toTable: string, fromColumn: string, toColumn: string) => {
+    if (!confirm(`Delete foreign key ${fromColumn} -> ${toColumn}?`)) return;
+    setDeleting(true);
+    try {
+      await deleteForeignKey(fromTable, toTable, fromColumn, toColumn);
+      await loadSchemaGraph();
+    } catch (err) {
+      console.error("Failed to delete foreign key:", err);
+      alert("Failed to delete foreign key");
+    } finally {
+      setDeleting(false);
+    }
+  }, [loadSchemaGraph]);
 
   useEffect(() => {
     setSelectedSchemaNode(null);
@@ -385,7 +415,7 @@ export default function GraphPage() {
                     <div>Chunks: {hoveredNode.properties.totalChunks as number}</div>
                   </div>
                 )}
-                {hoveredNode.type === "chunk" && hoveredNode.properties.textPreview && (
+                {hoveredNode.type === "chunk" && !!hoveredNode.properties.textPreview && (
                   <div className="text-xs text-muted mt-1">{String(hoveredNode.properties.textPreview)}</div>
                 )}
               </div>
@@ -396,12 +426,22 @@ export default function GraphPage() {
               <div className="p-3 bg-accent rounded-lg border border-border">
                 <div className="flex items-center justify-between mb-1">
                   <div className="text-sm font-medium">{selectedSchemaNode.label}</div>
-                  <button
-                    onClick={() => setSelectedSchemaNode(null)}
-                    className="text-xs text-muted hover:text-foreground"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleDeleteTable(selectedSchemaNode.id)}
+                      disabled={deleting}
+                      className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+                      title="Delete table"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setSelectedSchemaNode(null)}
+                      className="text-xs text-muted hover:text-foreground"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 <div className="text-xs text-muted space-y-1">
                   {selectedSchemaNode.properties.description ? (
@@ -426,6 +466,33 @@ export default function GraphPage() {
                       );
                     } catch { return null; }
                   })() : null}
+                  {/* Foreign keys for this table */}
+                  {schemaForceData && (() => {
+                    const fks = schemaForceData.links.filter(
+                      (l) => l.source === selectedSchemaNode.id || l.target === selectedSchemaNode.id
+                    );
+                    if (fks.length === 0) return null;
+                    return (
+                      <div className="mt-2">
+                        <div className="font-medium mb-0.5">Foreign Keys:</div>
+                        {fks.map((fk, i) => (
+                          <div key={i} className="flex items-center justify-between gap-1 py-0.5">
+                            <span className="font-mono truncate">
+                              {String(fk.source)}.{fk.fromColumn} → {String(fk.target)}.{fk.toColumn}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteFK(String(fk.source), String(fk.target), fk.fromColumn!, fk.toColumn!)}
+                              disabled={deleting}
+                              className="text-red-400 hover:text-red-300 shrink-0 disabled:opacity-50"
+                              title="Delete FK"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}

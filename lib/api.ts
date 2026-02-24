@@ -136,6 +136,24 @@ export async function fetchSchemaGraph(documentId?: string) {
   return res.json();
 }
 
+export async function deleteSchemaTable(tableName: string) {
+  const res = await fetch(`${API_BASE}/api/graph/schema/tables/${encodeURIComponent(tableName)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete table");
+  return res.json();
+}
+
+export async function deleteForeignKey(fromTable: string, toTable: string, fromColumn: string, toColumn: string) {
+  const res = await fetch(`${API_BASE}/api/graph/schema/foreign-keys`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fromTable, toTable, fromColumn, toColumn }),
+  });
+  if (!res.ok) throw new Error("Failed to delete foreign key");
+  return res.json();
+}
+
 /** SQL Agent with SSE streaming. Emits tool steps + final answer. */
 export function agentStream(
   question: string,
