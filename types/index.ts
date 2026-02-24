@@ -21,19 +21,10 @@ export interface ChatSource {
   score: number;
 }
 
-export type ChatMode = "chat" | "sql-agent";
-
-export interface AgentStep {
-  tool: string;
-  input: string;
-  result: string;
-}
-
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   sources?: ChatSource[];
-  steps?: AgentStep[];
 }
 
 export interface ModelOption {
