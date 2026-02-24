@@ -5,7 +5,6 @@ import { useState, useCallback } from "react";
 import { Table, ConfigProvider, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Resizable } from "react-resizable";
-import "react-resizable/css/styles.css";
 import { deleteDocument } from "@/lib/api";
 import type { DocumentMeta } from "@/types";
 
@@ -35,7 +34,7 @@ function ResizableTitle(
       height={0}
       handle={
         <span
-          className="react-resizable-handle"
+          className="col-resize-handle"
           style={{
             position: "absolute",
             right: -5,
