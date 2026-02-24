@@ -11,7 +11,7 @@ export default function ChatWindow() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [provider, setProvider] = useState<LLMProvider>("openai");
-  const [model, setModel] = useState("gpt-4o-mini");
+  const [model, setModel] = useState("gpt-5.2-2025-12-11");
   const [models, setModels] = useState<ModelsMap>({});
   const [mode, setMode] = useState<ChatMode>("chat");
   const bottomRef = useRef<HTMLDivElement>(null);

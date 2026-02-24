@@ -11,7 +11,7 @@ export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [embeddingProvider, setEmbeddingProvider] = useState<EmbeddingProvider>("openai");
-  const [embeddingModel, setEmbeddingModel] = useState("text-embedding-3-small");
+  const [embeddingModel, setEmbeddingModel] = useState("text-embedding-3-large");
   const [embeddingModels, setEmbeddingModels] = useState<ModelsMap>({});
 
   const loadDocuments = useCallback(async () => {

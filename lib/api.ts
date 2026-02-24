@@ -129,6 +129,13 @@ export async function fetchChunkGraph(documentId: string) {
   return res.json();
 }
 
+export async function fetchSchemaGraph(documentId?: string) {
+  const params = documentId ? `?documentId=${documentId}` : "";
+  const res = await fetch(`${API_BASE}/api/graph/schema${params}`);
+  if (!res.ok) throw new Error("Failed to fetch schema graph");
+  return res.json();
+}
+
 /** SQL Agent with SSE streaming. Emits tool steps + final answer. */
 export function agentStream(
   question: string,

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { fetchDocumentGraph, fetchRelatedDocuments, fetchChunkGraph } from "@/lib/api";
+import { fetchDocumentGraph, fetchRelatedDocuments, fetchChunkGraph, fetchSchemaGraph } from "@/lib/api";
 import type { GraphData, RelatedDocument } from "@/types";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
@@ -11,7 +11,7 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false 
 interface GraphNode2D {
   id: string;
   label: string;
-  type: "document" | "chunk";
+  type: "document" | "chunk" | "table";
   isExternal?: boolean;
   isSelected?: boolean;
   properties: Record<string, unknown>;
@@ -24,6 +24,8 @@ interface GraphLink2D {
   target: string;
   type: string;
   score?: number;
+  fromColumn?: string;
+  toColumn?: string;
 }
 
 function toForceData(data: GraphData, selectedDoc?: string | null) {
@@ -41,6 +43,8 @@ function toForceData(data: GraphData, selectedDoc?: string | null) {
     target: e.target,
     type: e.type,
     score: e.properties.score as number | undefined,
+    fromColumn: e.properties.fromColumn as string | undefined,
+    toColumn: e.properties.toColumn as string | undefined,
   }));
 
   return { nodes, links };
@@ -51,9 +55,11 @@ const COLORS = {
   docNodeSelected: "#f59e0b",
   chunkNode: "#22d3ee",
   chunkExternal: "#f97316",
+  tableNode: "#10b981",
   edgeRelated: "#6366f180",
   edgeNext: "#22d3ee60",
   edgeSimilar: "#f9731680",
+  edgeForeignKey: "#10b98180",
   text: "#e2e8f0",
   textMuted: "#94a3b8",
 };
@@ -65,12 +71,14 @@ export default function GraphPage() {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [relatedDocs, setRelatedDocs] = useState<RelatedDocument[]>([]);
   const [chunkGraph, setChunkGraph] = useState<GraphData | null>(null);
+  const [schemaGraph, setSchemaGraph] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "chunks">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "chunks" | "schema">("overview");
   const [selectedDoc, setSelectedDoc] = useState<string | null>(docId);
   const [hoveredNode, setHoveredNode] = useState<GraphNode2D | null>(null);
+  const [selectedSchemaNode, setSelectedSchemaNode] = useState<GraphNode2D | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const el = containerRef.current;
@@ -80,7 +88,7 @@ export default function GraphPage() {
     });
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [loading]);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -114,10 +122,24 @@ export default function GraphPage() {
     }
   }, [selectedDoc]);
 
+  const loadSchemaGraph = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchSchemaGraph(selectedDoc || undefined);
+      setSchemaGraph(data);
+    } catch (err) {
+      console.error("Failed to load schema graph:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDoc]);
+
   useEffect(() => {
+    setSelectedSchemaNode(null);
     if (activeTab === "overview") loadGraph();
     else if (activeTab === "chunks" && selectedDoc) loadChunkGraph();
-  }, [activeTab, loadGraph, loadChunkGraph, selectedDoc]);
+    else if (activeTab === "schema") loadSchemaGraph();
+  }, [activeTab, loadGraph, loadChunkGraph, loadSchemaGraph, selectedDoc]);
 
   const overviewForceData = useMemo(
     () => (graphData ? toForceData(graphData, selectedDoc) : null),
@@ -129,8 +151,13 @@ export default function GraphPage() {
     [chunkGraph, selectedDoc],
   );
 
+  const schemaForceData = useMemo(
+    () => (schemaGraph ? toForceData(schemaGraph, selectedDoc) : null),
+    [schemaGraph, selectedDoc],
+  );
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="border-b border-border px-6 py-3 flex items-center gap-4">
         <h2 className="text-lg font-semibold">Document Graph</h2>
@@ -157,16 +184,22 @@ export default function GraphPage() {
               Chunks
             </button>
           )}
+          <button
+            onClick={() => setActiveTab("schema")}
+            className={`px-3 py-1 rounded text-xs ${activeTab === "schema" ? "bg-primary text-primary-text" : "bg-surface text-muted"}`}
+          >
+            Schema
+          </button>
         </div>
       </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-muted text-sm">Loading graph...</div>
       ) : (
-        <div className="flex-1 flex">
+        <div className="flex-1 flex min-h-0">
           {/* Graph canvas */}
-          <div ref={containerRef} className="flex-1 relative bg-background">
-            {activeTab === "overview" && overviewForceData && overviewForceData.nodes.length > 0 ? (
+          <div ref={containerRef} className="flex-1 relative bg-background min-w-0 overflow-hidden">
+            {dimensions.width === 0 ? null : activeTab === "overview" && overviewForceData && overviewForceData.nodes.length > 0 ? (
               <ForceGraph2D
                 width={dimensions.width}
                 height={dimensions.height}
@@ -239,11 +272,53 @@ export default function GraphPage() {
                 d3AlphaDecay={0.02}
                 d3VelocityDecay={0.3}
               />
+            ) : activeTab === "schema" && schemaForceData && schemaForceData.nodes.length > 0 ? (
+              <ForceGraph2D
+                width={dimensions.width}
+                height={dimensions.height}
+                graphData={schemaForceData}
+                nodeRelSize={8}
+                nodeCanvasObject={(node: GraphNode2D, ctx: CanvasRenderingContext2D, globalScale: number) => {
+                  const label = node.label.length > 20 ? node.label.slice(0, 17) + "..." : node.label;
+                  const fontSize = Math.max(11 / globalScale, 3);
+                  ctx.font = `bold ${fontSize}px Sans-Serif`;
+                  const textWidth = ctx.measureText(label).width;
+                  const padding = 4;
+                  const w = textWidth + padding * 2;
+                  const h = fontSize + padding * 2;
+
+                  ctx.fillStyle = COLORS.tableNode;
+                  ctx.beginPath();
+                  ctx.roundRect(node.x! - w / 2, node.y! - h / 2, w, h, 4);
+                  ctx.fill();
+                  ctx.strokeStyle = "#fff";
+                  ctx.lineWidth = 1;
+                  ctx.stroke();
+
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "middle";
+                  ctx.fillStyle = "#fff";
+                  ctx.fillText(label, node.x!, node.y!);
+                }}
+                linkColor={() => COLORS.edgeForeignKey}
+                linkWidth={2}
+                linkDirectionalArrowLength={8}
+                linkDirectionalArrowRelPos={1}
+                linkLabel={(link: GraphLink2D) =>
+                  link.fromColumn ? `FK: ${link.fromColumn} -> ${link.toColumn}` : link.type
+                }
+                onNodeClick={(node: GraphNode2D) => setSelectedSchemaNode(prev => prev?.id === node.id ? null : node)}
+                cooldownTicks={100}
+                d3AlphaDecay={0.02}
+                d3VelocityDecay={0.3}
+              />
             ) : (
               <div className="flex-1 flex items-center justify-center text-muted text-sm h-full">
                 {activeTab === "chunks" && !selectedDoc
                   ? "Select a document to view its chunk graph."
-                  : "No graph data. Upload documents to see relationships."}
+                  : activeTab === "schema"
+                    ? "No schema data. Upload database documents to extract tables."
+                    : "No graph data. Upload documents to see relationships."}
               </div>
             )}
 
@@ -264,7 +339,7 @@ export default function GraphPage() {
                     RELATED_TO
                   </div>
                 </>
-              ) : (
+              ) : activeTab === "chunks" ? (
                 <>
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full inline-block" style={{ background: COLORS.chunkNode }} />
@@ -283,14 +358,25 @@ export default function GraphPage() {
                     SIMILAR_TO
                   </div>
                 </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-3 rounded inline-block" style={{ background: COLORS.tableNode }} />
+                    Table
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-0.5 inline-block" style={{ background: COLORS.edgeForeignKey }} />
+                    FOREIGN_KEY
+                  </div>
+                </>
               )}
             </div>
           </div>
 
           {/* Side panel */}
           <div className="w-72 border-l border-border bg-surface overflow-y-auto p-4 space-y-4">
-            {/* Hover info */}
-            {hoveredNode && (
+            {/* Hover info (documents & chunks) */}
+            {hoveredNode && hoveredNode.type !== "table" && (
               <div className="p-3 bg-accent rounded-lg border border-border">
                 <div className="text-sm font-medium mb-1">{hoveredNode.label}</div>
                 {hoveredNode.type === "document" && (
@@ -302,6 +388,45 @@ export default function GraphPage() {
                 {hoveredNode.type === "chunk" && hoveredNode.properties.textPreview && (
                   <div className="text-xs text-muted mt-1">{String(hoveredNode.properties.textPreview)}</div>
                 )}
+              </div>
+            )}
+
+            {/* Selected schema node info (click to show) */}
+            {activeTab === "schema" && selectedSchemaNode && (
+              <div className="p-3 bg-accent rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm font-medium">{selectedSchemaNode.label}</div>
+                  <button
+                    onClick={() => setSelectedSchemaNode(null)}
+                    className="text-xs text-muted hover:text-foreground"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="text-xs text-muted space-y-1">
+                  {selectedSchemaNode.properties.description ? (
+                    <div>{String(selectedSchemaNode.properties.description)}</div>
+                  ) : null}
+                  {selectedSchemaNode.properties.columns ? (() => {
+                    try {
+                      const cols = JSON.parse(String(selectedSchemaNode.properties.columns)) as Array<{
+                        name: string; type: string; isPrimaryKey: boolean;
+                      }>;
+                      return (
+                        <div className="mt-1">
+                          <div className="font-medium mb-0.5">Columns:</div>
+                          {cols.map((col) => (
+                            <div key={col.name} className="flex gap-1 font-mono">
+                              <span className="text-amber-400">{col.isPrimaryKey ? "PK" : "  "}</span>
+                              <span>{col.name}</span>
+                              <span className="text-muted">{col.type}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    } catch { return null; }
+                  })() : null}
+                </div>
               </div>
             )}
 
@@ -336,6 +461,18 @@ export default function GraphPage() {
                 <div className="text-sm">
                   <span className="text-muted">Similar:</span>{" "}
                   {chunkGraph.edges.filter((e) => e.type === "SIMILAR_TO").length}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "schema" && schemaGraph && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase text-muted">Schema Graph</h3>
+                <div className="text-sm">
+                  <span className="text-muted">Tables:</span> {schemaGraph.nodes.length}
+                </div>
+                <div className="text-sm">
+                  <span className="text-muted">Foreign Keys:</span> {schemaGraph.edges.length}
                 </div>
               </div>
             )}
@@ -378,6 +515,24 @@ export default function GraphPage() {
                       {node.properties.fileType as string} | {node.properties.totalChunks as number} chunks
                     </div>
                   </button>
+                ))}
+              </div>
+            )}
+
+            {/* Table list for schema tab */}
+            {activeTab === "schema" && schemaGraph && schemaGraph.nodes.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase text-muted">Tables</h3>
+                {schemaGraph.nodes.map((node) => (
+                  <div
+                    key={node.id}
+                    className="p-2 rounded-lg border border-border"
+                  >
+                    <div className="text-sm font-medium">{node.label}</div>
+                    {node.properties.description ? (
+                      <div className="text-xs text-muted mt-0.5">{String(node.properties.description)}</div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             )}

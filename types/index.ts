@@ -48,7 +48,7 @@ export type ModelsMap = Record<string, ModelOption[]>;
 export interface GraphNode {
   id: string;
   label: string;
-  type: "document" | "chunk";
+  type: "document" | "chunk" | "table";
   properties: Record<string, unknown>;
 }
 
