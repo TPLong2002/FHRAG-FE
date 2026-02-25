@@ -27,6 +27,7 @@ export default function ModelSelector({ models, provider, model, onProviderChang
       >
         <option value="openai">OpenAI</option>
         <option value="google">Google</option>
+        <option value="aistudio">AI Studio</option>
       </select>
       <select
         value={model}
