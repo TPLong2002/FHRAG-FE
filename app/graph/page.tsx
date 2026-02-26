@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { fetchDocumentGraph, fetchRelatedDocuments, fetchChunkGraph, fetchSchemaGraph, deleteSchemaTable, deleteForeignKey } from "@/lib/api";
@@ -65,6 +65,14 @@ const COLORS = {
 };
 
 export default function GraphPage() {
+  return (
+    <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted text-sm">Loading...</div>}>
+      <GraphPageContent />
+    </Suspense>
+  );
+}
+
+function GraphPageContent() {
   const searchParams = useSearchParams();
   const docId = searchParams.get("doc");
 

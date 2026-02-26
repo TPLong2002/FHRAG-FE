@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
         <div className="flex h-screen">
           {/* Sidebar */}
           <aside className="w-56 border-r border-border bg-surface flex flex-col shrink-0">
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </svg>
                 Chat
               </Link>
-              <Link
+              {/* <Link
                 href="/documents"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors"
               >
@@ -51,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <path strokeLinecap="round" strokeWidth={2} d="M8 7.5L10.5 16M16 7.5L13.5 16M8.5 6H15.5" />
                 </svg>
                 Graph
-              </Link>
+              </Link> */}
             </nav>
           </aside>
 

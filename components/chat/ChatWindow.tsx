@@ -10,8 +10,8 @@ export default function ChatWindow() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [provider, setProvider] = useState<LLMProvider>("openai");
-  const [model, setModel] = useState("gpt-5.2-2025-12-11");
+  const [provider, setProvider] = useState<LLMProvider>("aistudio");
+  const [model, setModel] = useState("gemini-3-flash-preview");
   const [models, setModels] = useState<ModelsMap>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);

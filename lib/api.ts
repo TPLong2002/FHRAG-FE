@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE = "";
 
 export async function fetchModels(type: "llm" | "embedding") {
   const res = await fetch(`${API_BASE}/api/models/${type}`);
