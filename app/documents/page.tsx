@@ -10,8 +10,8 @@ import type { DocumentMeta, EmbeddingProvider, ModelsMap } from "@/types";
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [embeddingProvider, setEmbeddingProvider] = useState<EmbeddingProvider>("openai");
-  const [embeddingModel, setEmbeddingModel] = useState("text-embedding-3-large");
+  const [embeddingProvider, setEmbeddingProvider] = useState<EmbeddingProvider>("google");
+  const [embeddingModel, setEmbeddingModel] = useState("gemini-embedding-001");
   const [embeddingModels, setEmbeddingModels] = useState<ModelsMap>({});
 
   const loadDocuments = useCallback(async () => {

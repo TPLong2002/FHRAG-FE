@@ -26,7 +26,7 @@ export default function EmbeddingConfig({ models, provider, model, onProviderCha
         }}
         className="px-3 py-1.5 rounded-lg border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       >
-        <option value="openai">OpenAI</option>
+        {/* <option value="openai">OpenAI</option> */}
         <option value="google">Google</option>
       </select>
       <select

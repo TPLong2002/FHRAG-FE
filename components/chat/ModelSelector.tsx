@@ -25,8 +25,8 @@ export default function ModelSelector({ models, provider, model, onProviderChang
         }}
         className="px-3 py-1.5 rounded-lg border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       >
-        <option value="openai">OpenAI</option>
-        <option value="google">Google</option>
+        {/* <option value="openai">OpenAI</option>
+        <option value="google">Google</option> */}
         <option value="aistudio">AI Studio</option>
       </select>
       <select
