@@ -1,0 +1,15 @@
+services:
+  fe-chatbot:
+    image: tplong/fe-chatbot:latest
+    container_name: fe-chatbot
+    ports:
+      - "${FE_PORT:-3000}:3000"
+    environment:
+      - BE_API_URL=${BE_API_URL:-http://be-chatbot:3001}
+    networks:
+      - app-net
+    restart: unless-stopped
+
+networks:
+  app-net:
+    external: true
