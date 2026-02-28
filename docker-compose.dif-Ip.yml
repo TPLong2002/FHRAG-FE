@@ -1,0 +1,10 @@
+services:
+  fe-chatbot:
+    image: tplong/fe-chatbot:latest
+    platform: linux/amd64
+    container_name: fe-chatbot
+    ports:
+      - "${FE_PORT:-3000}:3000"
+    environment:
+      - BE_API_URL=${BE_API_URL:-http://host.docker.internal:3001}
+    restart: unless-stopped
